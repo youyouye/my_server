@@ -2,7 +2,7 @@
 #define CLIENT_H_
 #include <functional>
 #include <string>
-#include "callback.h"
+#include "callback.hpp"
 #include "connector.h"
 
 class EventLoop;
