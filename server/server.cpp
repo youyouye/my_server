@@ -60,7 +60,7 @@ void Server::removeConnectionInLoop(const ConnectionPtr& conn)
 		<< "] - connection " << conn->name();
 	size_t n = connections_.erase(conn->name());
 	EventLoop* io_loop = conn->getLoop();
-	std::function<void()> func = std::bind(&Connection::connectDestroyed, conn.get());
+	std::function<void()> func = std::bind(&Connection::connectDestroyed, conn);
 	io_loop->queueInLoop(func);
 }
 

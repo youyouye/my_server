@@ -43,7 +43,7 @@ void Epoll::poll(int timeoutMs,std::vector<Channel>* active_channels)
 	}
 	else if (num_events == 0)
 	{
-		std::cout <<"nothing happend"<<std::endl;
+//		std::cout <<"nothing happend"<<std::endl;
 	}
 	else
 	{

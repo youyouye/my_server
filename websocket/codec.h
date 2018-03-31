@@ -7,7 +7,7 @@ class HeaderHash;
 class HeaderEqual;
 typedef std::unordered_multimap<std::string, std::string, HeaderHash, HeaderEqual> HttpHeader;
 typedef std::function<void(const ConnectionPtr& conn, const std::string& message, Timestamp time)> WebsocketMessageCallback;
-
+typedef std::function<void(const ConnectionPtr& conn, const std::string& message)> SendMessageCallback;
 enum CodecState
 {
 	StartConnect,
@@ -83,16 +83,16 @@ public:
 class CodecResult
 {	
 public:
-	CodecResult(CodecState state) 
-		: state_(state),read_length_(0)
+	CodecResult(CodecState state,bool continue_flag) 
+		: state_(state),read_length_(0),continue_flag_(continue_flag)
 	{
 	}
-	CodecResult(CodecState state, size_t read_length,unsigned char opcode) :
-		state_(state), read_length_(read_length),opcode_(opcode)
+	CodecResult(CodecState state, size_t read_length,unsigned char opcode,bool continue_flag) :
+		state_(state), read_length_(read_length),opcode_(opcode),continue_flag_(continue_flag)
 	{
 	}
-	CodecResult(CodecState state,int error,const std::string& reason)
-		: state_(state), read_length_(0),error_code_(error),error_reason_(reason)
+	CodecResult(CodecState state,int error,const std::string& reason,bool conttinue_flag)
+		: state_(state), read_length_(0),error_code_(error),error_reason_(reason),continue_flag_(conttinue_flag)
 	{
 	}
 
@@ -101,6 +101,7 @@ public:
 	unsigned char opcode_;
 	int error_code_;
 	std::string error_reason_;
+	bool continue_flag_;
 };	
 	
 class Codec 
@@ -112,6 +113,7 @@ public:
 	void AddConnection(const ConnectionPtr& conn);
 	void DeleteConnection(const ConnectionPtr& conn);
 	void setMessageCallback(const WebsocketMessageCallback& callback) { message_callback_ = callback; }
+	void setSendMessageCallback(const SendMessageCallback& callback) { send_callback_ = callback; }
 	CodecResult onStartConnect(const ConnectionPtr& conn,
 		Buffer* buffer,
 		Timestamp time);
@@ -132,6 +134,7 @@ private:
 private:
 	std::unordered_map<std::string, std::shared_ptr<ConnectionInfo>> connections_info_;
 	WebsocketMessageCallback message_callback_;
+	SendMessageCallback send_callback_;
 };
 
 

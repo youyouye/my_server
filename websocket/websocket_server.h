@@ -22,6 +22,7 @@ public:
 
 	void start();
 	void onReceiveMessage(const ConnectionPtr& conn,const std::string& message,Timestamp time);
+	void onSendMessage(const ConnectionPtr& conn, const std::string& message);
 private:
 	void onConnection(const ConnectionPtr& conn);
 	void onMessage(const ConnectionPtr& conn,

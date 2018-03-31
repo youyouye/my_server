@@ -244,7 +244,7 @@ public:
 	
 	std::vector<char> readBytes(size_t len) 
 	{
-		if (len < readableBytes())
+		if (len <= readableBytes())
 		{
 			std::vector<char> ret(buffer_.begin()+reader_index_,buffer_.begin()+reader_index_+len);
 			reader_index_ += len;

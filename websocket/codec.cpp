@@ -33,28 +33,31 @@ CodecResult Codec::onStartConnect(const ConnectionPtr& conn,
 		RequestMessage& request = connections_info_[conn->name()]->request_message_;
 		if (parseRequest(buffer,request)) 
 		{
+			//read \r\n
+			buffer->readBytes(2);
 			std::string hand_shake;
 			if (generateHandshake(request.headers, hand_shake))
 			{
 				conn->send(hand_shake);
-				return CodecState::CompleteHandShake;
+				send_callback_(conn,"");
+				return CodecResult(CodecState::CompleteHandShake,false);
 			}
 			else 
 			{
 				//error message,we should shutdown it;
 				conn->shutdown();
-				return CodecState::InvalidMessage;
+				return CodecResult(CodecState::InvalidMessage,false);
 			}
 		}
 		else 
 		{
 			//error message,we should shutdown it;
 			conn->shutdown();
-			return CodecState::InvalidMessage;
+			return CodecResult(CodecState::InvalidMessage,false);
 		}
 	}
 	//FIXME:prevent accept too much unuse message
-	return CodecState::StartConnect;
+	return CodecResult(CodecState::StartConnect,false);
 }
 
 CodecResult Codec::onCompleteHandshake(const ConnectionPtr& conn,
@@ -65,25 +68,25 @@ CodecResult Codec::onCompleteHandshake(const ConnectionPtr& conn,
 	{
 		auto bytes = buffer->readBytes(2);
 		unsigned char fin_rsv_opcode = bytes[0];
-		if (bytes[1] < 128)
+		if ((unsigned char)bytes[1] < 128)
 		{
-			return CodecResult(CodecState::Error,1002,"message from client not masked");
+			return CodecResult(CodecState::Error,1002,"message from client not masked",false);
 		}
-		size_t length = (bytes[1] & 127);
+		size_t length = ((unsigned char)bytes[1] & 127);
 		if (length == 126)
 		{
-			return CodecResult(CodecState::ReadMessageLength,2,fin_rsv_opcode);
+			return CodecResult(CodecState::ReadMessageLength,2,fin_rsv_opcode,buffer->readableBytes()?1:0);
 		}
 		else if (length == 127) 
 		{
-			return CodecResult(CodecState::ReadMessageLength, 8, fin_rsv_opcode);
+			return CodecResult(CodecState::ReadMessageLength, 8, fin_rsv_opcode, buffer->readableBytes() ? 1 : 0);
 		}
 		else 
 		{
-			return CodecResult(CodecState::ReadMessageContent,length, fin_rsv_opcode);
+			return CodecResult(CodecState::ReadMessageContent,length, fin_rsv_opcode, buffer->readableBytes() ? 1 : 0);
 		}
 	}
-	return CodecState::CompleteHandShake;
+	return CodecResult(CodecState::CompleteHandShake,false);
 }
 
 CodecResult Codec::onReadMessageLength(const ConnectionPtr& conn,
@@ -101,11 +104,11 @@ CodecResult Codec::onReadMessageLength(const ConnectionPtr& conn,
 			{
 				length += static_cast<size_t>(bytes[c]) << (8 * (num_bytes-1-c));
 			}
-			return CodecResult(CodecState::ReadMessageContent,length,last_result.opcode_);
+			return CodecResult(CodecState::ReadMessageContent,length,last_result.opcode_, buffer->readableBytes() ? 1 : 0);
 		}
 		else 
 		{
-			return CodecResult(CodecState::ReadMessageLength,2,last_result.opcode_);
+			return CodecResult(CodecState::ReadMessageLength,2,last_result.opcode_,false);
 		}
 	}
 }
@@ -141,7 +144,7 @@ CodecResult Codec::onReadMessageContent(const ConnectionPtr& conn,
 		}
 		for (size_t c = 0; c < last_result.read_length_;c++)
 		{
-			fragment_message.content_.append(std::to_string(bytes[c + 4] ^ bytes[c % 4]));
+			fragment_message.content_.push_back((bytes[c + 4] ^ bytes[c % 4]));
 		}
 		//If connection close
 		if ((last_result.opcode_ & 0x0f) == 8)
@@ -153,7 +156,7 @@ CodecResult Codec::onReadMessageContent(const ConnectionPtr& conn,
 				unsigned char byte2 = fragment_message.content_[1];
 				status = (static_cast<int>(byte1) << 8) + byte2;
 			}
-			return CodecResult(CodecState::Error, status, fragment_message.content_);
+			return CodecResult(CodecState::Error, status, fragment_message.content_,false);
 		}
 		else if ((last_result.opcode_ & 0x0f) == 9)
 		{
@@ -164,16 +167,16 @@ CodecResult Codec::onReadMessageContent(const ConnectionPtr& conn,
 		}
 		else if ((last_result.opcode_ & 0x80) == 0) 
 		{
-			return CodecResult(CodecState::CompleteHandShake);
+			return CodecResult(CodecState::CompleteHandShake,true);
 		}
 		else 
 		{
 			message_callback_(conn,fragment_message.content_,time);
 			fragment_message.clear();
-			return CodecResult(CodecState::CompleteHandShake);
+			return CodecResult(CodecState::CompleteHandShake,true);
 		}
 	}
-	return CodecResult(CodecState::ReadMessageContent, last_result.read_length_, last_result.opcode_);
+	return CodecResult(CodecState::ReadMessageContent, last_result.read_length_, last_result.opcode_,false);
 }
 
 bool Codec::peekUntil(Buffer* buffer,const std::string& fragment)
@@ -187,7 +190,7 @@ bool Codec::parseRequest(Buffer* buffer,RequestMessage& request)
 {
 	std::size_t method_end;
 	std::string current_content = buffer->readUntil("\r\n");	//FIXME:also need read \n
-	if ((method_end = (current_content.find(' ') != std::string::npos)))
+	if ((method_end = current_content.find(' ')) != std::string::npos)
 	{
 		request.method = current_content.substr(0,method_end);
 		size_t query_start = std::string::npos,path_and_query_string_end = std::string::npos;
@@ -219,7 +222,7 @@ bool Codec::parseRequest(Buffer* buffer,RequestMessage& request)
 				{
 					return false;
 				}
-				request.version = current_content.substr(protocol_end + 1,current_content.size() - protocol_end - 2);
+				request.version = current_content.substr(protocol_end + 1,current_content.size() - protocol_end - 1);
 			}
 			else
 				return false;
@@ -243,13 +246,16 @@ bool Codec::generateHandshake(const HttpHeader& header,std::string& output)
 	auto header_it = header.find("Sec-WebSocket-Key");
 	if (header_it == header.end())
 		return false;
-	static auto magic_string = "258VAFA5-E91R-47BA-87CA-C5AE0DG85BQ1";
+	//test
+	std::string key = header_it->second;
+	static auto magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 	auto sha1 = Crypto::sha1(header_it->second + magic_string);
 	std::stringstream ss;
 	ss << "HTTP/1.1 101 Web Socket Protocol Handshake\r\n";
 	ss << "Upgrade: websocket\r\n";
 	ss << "Connection: Upgrade\r\n";
 	ss << "Sec-WebSocket-Accept: " << Crypto::base64Encode(sha1) << "\r\n";
+	ss << "Sec-WebSocket-Version: 13\r\n";
 	ss << "\r\n";
 	output = ss.str();
 	return true;
@@ -267,8 +273,10 @@ bool RequestMessage::parseHeaders(Buffer* buffer)
 			if (line[value_start] == ' ')
 				value_start++;
 			if (value_start < line.size())
-				headers.emplace(line.substr(0,param_end),line.substr(value_start, line.size() - value_start - 1));
+			{
+				headers.emplace(line.substr(0, param_end), line.substr(value_start, line.size() - value_start));
+			}
 		}
-		line = buffer->readUntil("\n");
+		line = buffer->readUntil("\r\n");
 	}
 }

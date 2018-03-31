@@ -7,6 +7,7 @@ Acceptor::Acceptor(EventLoop* loop, const std::string& addr, int port)
 	accept_channel_(loop, accept_socket_.fd())
 {
 	accept_socket_.bind(addr, port);
+	accept_socket_.setReuseAddr(true);
 	accept_channel_.setReadCallback(std::bind(&Acceptor::handleRead,this));
 }
 

@@ -8,6 +8,7 @@ WebsocketServer::WebsocketServer(EventLoop* loop, const std::string& addr, int p
 	server_.setConnectionCallback(std::bind(&WebsocketServer::onConnection,this,std::placeholders::_1));
 	server_.setMessageCallback(std::bind(&WebsocketServer::onMessage,this,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3));
 	codec_.setMessageCallback(std::bind(&WebsocketServer::onReceiveMessage,this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	codec_.setSendMessageCallback(std::bind(&WebsocketServer::onSendMessage,this,std::placeholders::_1,std::placeholders::_2));
 }
 
 void WebsocketServer::start()
@@ -18,16 +19,21 @@ void WebsocketServer::start()
 void WebsocketServer::onReceiveMessage(const ConnectionPtr& conn, const std::string& message, Timestamp time)
 {
 	LOG_INFO << message <<LOG_END;
+	send(conn, "goodbye!");
 }
 
-//FIXME:好像server忘记写conn管理了;
+void WebsocketServer::onSendMessage(const ConnectionPtr& conn, const std::string& message)
+{
+	send(conn, "hello");
+}
+
 void WebsocketServer::onConnection(const ConnectionPtr& conn)
 {
 	LOG_INFO << "WebsocketServer - "<<conn->name() << " -> "
 		<<"is" << ((conn->connected() ? "UP":"DOWN")) << LOG_END;
 	if (conn->connected())
 	{
-		connections_.insert({conn->name(),WebsocketConn(conn,CodecState::StartConnect)});
+		connections_.insert({conn->name(),WebsocketConn(conn,CodecResult(CodecState::StartConnect,true))});
 		codec_.AddConnection(conn);
 	}
 	else 
@@ -46,25 +52,29 @@ void WebsocketServer::onMessage(const ConnectionPtr& conn,
 	Timestamp time) 
 {
 	auto websocket_conn = connections_.find(conn->name());
-	switch (websocket_conn->second.codec_result_.state_)
+	while (websocket_conn->second.codec_result_.continue_flag_) 
 	{
-	case CodecState::StartConnect:
-		websocket_conn->second.codec_result_ = codec_.onStartConnect(conn, buffer, time);
-		break;
-	case CodecState::CompleteHandShake:
-		websocket_conn->second.codec_result_ = codec_.onCompleteHandshake(conn, buffer, time);
-		break;
-	case CodecState::ReadMessageLength:
-		websocket_conn->second.codec_result_ = codec_.onReadMessageLength(conn, buffer, time, websocket_conn->second.codec_result_);
-		break;
-	case CodecState::ReadMessageContent:
-		websocket_conn->second.codec_result_ = codec_.onReadMessageContent(conn, buffer, time, websocket_conn->second.codec_result_);
-		break;
-	case CodecState::Error:
-		break;
-	case CodecState::InvalidMessage:
-		break;
+		switch (websocket_conn->second.codec_result_.state_)
+		{
+		case CodecState::StartConnect:
+			websocket_conn->second.codec_result_ = codec_.onStartConnect(conn, buffer, time);
+			break;
+		case CodecState::CompleteHandShake:
+			websocket_conn->second.codec_result_ = codec_.onCompleteHandshake(conn, buffer, time);
+			break;
+		case CodecState::ReadMessageLength:
+			websocket_conn->second.codec_result_ = codec_.onReadMessageLength(conn, buffer, time, websocket_conn->second.codec_result_);
+			break;
+		case CodecState::ReadMessageContent:
+			websocket_conn->second.codec_result_ = codec_.onReadMessageContent(conn, buffer, time, websocket_conn->second.codec_result_);
+			break;
+		case CodecState::Error:
+			break;
+		case CodecState::InvalidMessage:
+			break;
+		}
 	}
+	websocket_conn->second.codec_result_.continue_flag_ = true;
 }
 
 void WebsocketServer::sendClose(const ConnectionPtr& conn,int status, const std::string& reason)
