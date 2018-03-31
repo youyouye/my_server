@@ -3,7 +3,7 @@
 #include <memory>
 #include "buffer.h"
 #include "timestamp.h"
-#include "callback.h"
+#include "callback.hpp"
 
 class Socket;
 class Channel;

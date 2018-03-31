@@ -1,7 +1,7 @@
 #ifndef WEBSOCKET_SERVER_H_
 #define WEBSOCKET_SERVER_H_
 #include "../server/server.h"
-#include "../server/callback.h"
+#include "../server/callback.hpp"
 #include "codec.h"
 
 class EventLoop;
