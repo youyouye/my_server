@@ -8,7 +8,7 @@
 void start_server(const std::string& address) 
 {
 	EventLoop loop;
-	WebsocketServer server(&loop, address, 12346);
+	WebsocketServer server(&loop, address, 1935);
 	server.start();
 	loop.loop();
 }
@@ -16,7 +16,7 @@ void start_server(const std::string& address)
 void start_client(const std::string& address)
 {
 	EventLoop loop;
-	WebsocketClient client(&loop, address, 12346);
+	WebsocketClient client(&loop, address, 1935);
 	client.connect();
 	loop.loop();
 }
