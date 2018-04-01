@@ -5,15 +5,6 @@
 #include "codec.h"
 
 class EventLoop;
-
-class WebsocketConn 
-{
-public:
-	WebsocketConn(ConnectionPtr conn, CodecResult result) : conn_(conn), codec_result_(result) {}
-	ConnectionPtr conn_;
-	CodecResult codec_result_;
-};
-
 class WebsocketServer : public Server
 {
 public:

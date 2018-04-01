@@ -236,8 +236,28 @@ bool Codec::parseRequest(Buffer* buffer,RequestMessage& request)
 	return true;
 }
 
-void Codec::parseResponse(Buffer* buffer,RequestMessage& request)
+bool Codec::parseResponse(Buffer* buffer,RequestMessage& request)
 {
+	std::string line = buffer->readUntil("\r\n");	//FIXME:also need read \n
+	std::size_t version_end = line.find(' ');
+	if (version_end != std::string::npos) {
+		if (5 < line.size())
+		{
+			request.version = line.substr(5, version_end - 5);
+		}
+		else
+			return false;
+		if ((version_end + 1) < line.size())
+		{
+			request.status_code = line.substr(version_end + 1, line.size() - (version_end + 1) - 1);
+		}
+		else
+			return false;
+		request.parseHeaders(buffer);
+	}
+	else
+		return false;
+	return true;
 }
 
 bool Codec::generateHandshake(const HttpHeader& header,std::string& output)
@@ -280,3 +300,56 @@ bool RequestMessage::parseHeaders(Buffer* buffer)
 		line = buffer->readUntil("\r\n");
 	}
 }
+
+CodecResult Codec::generateClientHandshake(const ConnectionPtr& conn,const std::string& path,int port)
+{
+	std::stringstream ss;
+	ss << "GET " << path << " HTTP/1.1" << "\r\n";
+	ss << "Host: " << port << "\r\n";
+	ss << "Upgrade: websocket\r\n";
+	ss << "Connection: Upgrade\r\n";
+	//Make 16-byte nonce
+	std::string nonce;
+	nonce.reserve(16);
+	std::uniform_int_distribution<unsigned short> dist(0, 255);
+	std::random_device rd;
+	for (std::size_t c = 0; c < 16; c++)
+		nonce += static_cast<char>(dist(rd));
+
+	auto nonce_base64 = std::make_shared<std::string>(Crypto::base64Encode(nonce));
+	ss << "Sec-WebSocket-Key: " << *nonce_base64 << "\r\n";
+	ss << "Sec-WebSocket-Version: 13\r\n";
+	//add headers
+	ss << "\r\n";
+
+	connections_info_[conn->name()]->client_key_ = nonce_base64;
+	conn->send(ss.str());
+	return CodecResult(CodecState::SendHandShake,false);
+}
+
+CodecResult Codec::onClientReceiveHandshake(const ConnectionPtr& conn, Buffer* buffer,
+	Timestamp time) 
+{
+	if (peekUntil(buffer, "\r\n\r\n"))
+	{
+		RequestMessage& request = connections_info_[conn->name()]->request_message_;
+		if (parseResponse(buffer, request)) 
+		{
+			auto header_it = request.headers.find("Sec-WebSocket-Accept");
+			static auto ws_magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+			auto client_key = connections_info_[conn->name()]->client_key_;
+			if (header_it != request.headers.end()
+				&& Crypto::base64Decode(header_it->second) == Crypto::sha1(*client_key+ ws_magic_string))
+			{
+				return CodecResult(CodecState::ReadMessageLength,true);
+			}
+		}
+		else 
+		{
+			conn->shutdown();
+			return CodecResult(CodecState::InvalidMessage, false);
+		}
+	}
+	return CodecResult(CodecState::SendHandShake, false);
+}
+

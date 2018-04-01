@@ -18,6 +18,7 @@ public:
 	void stop();
 
 	void setConnectionCallback(ConnectionCallback callback);
+	void setMessageCallback(const MessageCallback& callback) { message_callback_ = callback; }
 private:
 	void newConnection(int sockfd);
 	void removeConnection(const ConnectionPtr& conn);

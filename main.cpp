@@ -3,6 +3,7 @@
 #include "server/client.h"
 #include "server/event_loop.h"
 #include "websocket/websocket_server.h"
+#include "websocket/websocket_client.h"
 
 void start_server(const std::string& address) 
 {
@@ -12,10 +13,10 @@ void start_server(const std::string& address)
 	loop.loop();
 }
 
-void start_client() 
+void start_client(const std::string& address)
 {
 	EventLoop loop;
-	Client client(&loop, "127.0.0.1", 80);
+	WebsocketClient client(&loop, address, 12346);
 	client.connect();
 	loop.loop();
 }
@@ -37,7 +38,7 @@ int main(int argc,char* argv[])
 	}
 	else 
 	{
-		start_client();
+		start_client(address);
 	}
     return 0;
 }

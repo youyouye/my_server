@@ -12,12 +12,12 @@ enum CodecState
 {
 	StartConnect,
 	InvalidMessage,
+	SendHandShake,
 	CompleteHandShake,
 	ReadMessageLength,
 	ReadMessageContent,
 	Error,
 };
-
 
 class HeaderHash 
 {
@@ -54,9 +54,10 @@ public:
 	std::string path;
 	std::string query_string;
 	std::string version;
+	std::string status_code;
 	HttpHeader headers;
 };	
-	
+
 class FragmentMessage
 {
 public:
@@ -78,6 +79,7 @@ class ConnectionInfo
 public:
 	RequestMessage request_message_;
 	FragmentMessage fragment_message_;
+	std::shared_ptr<std::string> client_key_;
 };
 
 class CodecResult
@@ -126,10 +128,14 @@ public:
 	CodecResult onReadMessageContent(const ConnectionPtr& conn,
 		Buffer* buffer,
 		Timestamp time, const CodecResult& last_result);
+	//client 
+	CodecResult generateClientHandshake(const ConnectionPtr& conn, const std::string& path, int port);
+	CodecResult onClientReceiveHandshake(const ConnectionPtr& conn, Buffer* buffer,
+		Timestamp time);
 private:
 	bool peekUntil(Buffer* buffer,const std::string& fragment);
 	bool parseRequest(Buffer* buffer,RequestMessage& request);
-	void parseResponse(Buffer* buffer,RequestMessage& request);
+	bool parseResponse(Buffer* buffer,RequestMessage& request);
 	bool generateHandshake(const HttpHeader& header, std::string& output);
 private:
 	std::unordered_map<std::string, std::shared_ptr<ConnectionInfo>> connections_info_;
@@ -137,5 +143,13 @@ private:
 	SendMessageCallback send_callback_;
 };
 
+
+class WebsocketConn
+{
+public:
+	WebsocketConn(ConnectionPtr conn, CodecResult result) : conn_(conn), codec_result_(result) {}
+	ConnectionPtr conn_;
+	CodecResult codec_result_;
+};
 
 #endif
