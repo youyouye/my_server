@@ -10,7 +10,7 @@ typedef std::function<void(const ConnectionPtr& conn, const std::string& message
 typedef std::function<void(const ConnectionPtr& conn, const std::string& message)> SendMessageCallback;
 enum CodecState
 {
-	StartConnect,
+	StartConnect = 1,
 	InvalidMessage,
 	SendHandShake,
 	CompleteHandShake,
