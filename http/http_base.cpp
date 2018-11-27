@@ -1,5 +1,6 @@
 #include "http_base.h"
 #include <sstream>
+#include "../log/Log.h"
 
 namespace http {
 
@@ -9,7 +10,6 @@ namespace http {
 			return tolower(a) == tolower(b);
 		});
 	}
-
 
 	std::string PercentTool::Encode(const std::string &value) noexcept
 	{
@@ -102,9 +102,9 @@ namespace http {
 	CaseInsensitiveMultimap HttpHeader::Parse(const std::string& str) noexcept
 	{
 		CaseInsensitiveMultimap result;
-		auto iter = str.find_first_of("\n");
+		auto iter = str.find_first_of("\r\n");
 		auto line = str.substr(0, iter);
-		auto content = str.substr(iter + 1, str.size());
+		auto content = str.substr(iter + 2, str.size());
 		std::size_t param_end;
 		while ((param_end = line.find(':')) != std::string::npos)
 		{
@@ -112,10 +112,16 @@ namespace http {
 			while (value_start + 1 < line.size() && line[value_start] == ' ')
 				++value_start;
 			if (value_start < line.size())
-				result.emplace(line.substr(0, param_end), line.substr(value_start, line.size() - value_start - 1));
-			iter = content.find_first_of("\n");
+				result.emplace(line.substr(0, param_end), line.substr(value_start, line.size() - value_start));
+			iter = content.find_first_of("\r\n");
 			line = content.substr(0, iter);
-			content = content.substr(iter + 1, content.size());
+			if (content.empty())
+				break;
+			if (iter == std::string::npos)
+				content = "";
+			else
+				content = content.substr(iter + 2, content.size());
+
 		}
 		return result;
 	}
@@ -124,9 +130,11 @@ namespace http {
 	{
 		request->header_.clear();
 		auto content = request->content_;
-		auto iter = content.find_first_of("\n");
+		LOG_DEBUG << "header content:" << content << LOG_END;
+		auto iter = content.find_first_of("\r\n");
 		auto line = content.substr(0, iter);
-		if (auto method_end = line.find(' ') != std::string::npos)
+		auto method_end = line.find(' ');
+		if (method_end != std::string::npos)
 		{
 			request->method_ = line.substr(0, method_end);
 
@@ -147,7 +155,7 @@ namespace http {
 			{
 				if (query_start != std::string::npos)
 				{
-					request->path_ = line.substr(method_end + 1, query_start - method_end - 2);
+					request->path_ = line.substr(method_end + 1, query_start - method_end - 1);
 					request->query_string_ = line.substr(query_start, path_and_query_end - query_start);
 				}
 				else
@@ -157,18 +165,18 @@ namespace http {
 				{
 					if (line.compare(path_and_query_end + 1, protocol_end - path_and_query_end - 1, "HTTP") != 0)
 						return false;
-					request->http_version_ = line.substr(protocol_end + 1, line.size() - protocol_end - 2);
+					request->http_version_ = line.substr(protocol_end + 1, line.size() - protocol_end - 1);
 				}
 				else
 					return false;
-				request->header_ = HttpHeader::Parse(content.substr(iter + 1, content.size()));
+				request->header_ = HttpHeader::Parse(content.substr(iter + 2, content.size()));
 			}
 			else
 				return false;
 		}
 		else
 			return false;
-		return false;
+		return true;
 	}
 
 	bool ResponseMessage::Parse(const std::string& str, std::string &version, std::string &status_code, CaseInsensitiveMultimap &header) noexcept
@@ -183,37 +191,35 @@ namespace http {
 
 	void Response::Send()
 	{
-		std::stringstream ss;
-		ss << this->rdbuf();
-		session_->conn_->send(ss.str());
-	}
-
-	void Response::Write(const char_type *ptr, std::streamsize n)
-	{
-		std::ostream::write(ptr, n);
+		session_->conn_->send(stream_buf_.str());
+		LOG_DEBUG << "Response:" << stream_buf_.str() << LOG_END;
 	}
 
 	void Response::Write(http::StatusCode status_code, const CaseInsensitiveMultimap &header)
 	{
-		*this << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
+		stream_buf_ << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
 		WriteHeader(header, 0);
 	}
 
 	void Response::Write(http::StatusCode status_code, const std::string &content, const CaseInsensitiveMultimap &header)
 	{
-		*this << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
+		stream_buf_ << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
 		WriteHeader(header, content.size());
+		if (!content.empty())
+		{
+			stream_buf_ << content;
+		}
 	}
 
 	void Response::Write(http::StatusCode status_code, std::istream &content, const CaseInsensitiveMultimap &header)
 	{
-		*this << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
+		stream_buf_ << "HTTP/1.1 " << http::status_code(status_code) << "\r\n";
 		content.seekg(0, std::ios::end);
 		auto size = content.tellg();
 		content.seekg(0, std::ios::beg);
 		WriteHeader(header, size);
 		if (size)
-			*this << content.rdbuf();
+			stream_buf_ << content.rdbuf();
 	}
 
 	void Response::Write(const std::string &content, const CaseInsensitiveMultimap &header)

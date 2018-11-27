@@ -234,7 +234,7 @@ public:
 		std::string result(peek(), readableBytes());
 		std::string ret;
 		size_t found;
-		if ((found = result.find_first_of(fragment)) != std::string::npos) 
+		if ((found = result.find(fragment)) != std::string::npos) 
 		{
 			ret = std::string(peek(),found);
 			retrieve(found+fragment.length());

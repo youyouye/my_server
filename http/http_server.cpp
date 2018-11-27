@@ -26,7 +26,6 @@ namespace http {
 
 	void HttpServer::onSendMessage(const ConnectionPtr& conn, const std::string& message)
 	{
-
 	}
 
 	void HttpServer::onConnection(const ConnectionPtr& conn)

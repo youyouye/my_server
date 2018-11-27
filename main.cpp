@@ -26,7 +26,7 @@ int main(int argc,char* argv[])
 {
     printf("hello from my_server!\n");
 
-	start_server("127.0.0.1");
+	start_server("0.0.0.0");
     
 	return 0;
 }

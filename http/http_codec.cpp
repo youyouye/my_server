@@ -27,10 +27,10 @@ namespace http {
 		Timestamp time)
 	{
 		auto session = connections_info_[conn->name()];
-		if (peekUntil(buffer, "\r\n"))
+		if (peekUntil(buffer, "\r\n\r\n"))
 		{
 			session->request_->header_read_time_ = std::chrono::system_clock::now();
-			session->request_->content_ = buffer->readUntil("\r\n");
+			session->request_->content_ = buffer->readUntil("\r\n\r\n");
 
 			std::size_t num_additional_bytes = buffer->readableBytes() - session->request_->content_.size() - 2;
 
@@ -40,7 +40,7 @@ namespace http {
 				conn->shutdown();
 				return CodecResult(CodecState::InvalidMessage, false);
 			}
-			buffer->readBytes(2);
+			buffer->readBytes(4);
 			auto header_it = session->request_->header_.find("Content-Length");
 			if (header_it != session->request_->header_.end())
 			{
@@ -70,8 +70,7 @@ namespace http {
 			}
 			else
 			{
-				conn->shutdown();
-				return CodecResult(CodecState::InvalidMessage, false);
+				return dealCallback(session);
 			}
 		}
 		return CodecResult(CodecState::StartConnect, false);

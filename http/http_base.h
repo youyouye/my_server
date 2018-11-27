@@ -6,6 +6,7 @@
 #include <chrono>
 #include <ostream>
 #include <istream>
+#include <sstream>
 #include "../server/connection.h"
 #include "http_status_code.h"
 
@@ -86,7 +87,7 @@ namespace http {
 		std::chrono::system_clock::time_point header_read_time_;
 	};
 
-	class Response : public std::enable_shared_from_this<Response>, public std::ostream
+	class Response : public std::enable_shared_from_this<Response>
 	{
 	public:
 		Response(std::shared_ptr<Session> session)
@@ -106,17 +107,15 @@ namespace http {
 				else if (!chunked_transfer_encoding && case_insensitive_equal(field.first, "transfer-encoding")
 					&& case_insensitive_equal(field.second, "chunked"))
 					chunked_transfer_encoding = true;
-				*this << field.first << ": " << field.second << "\r\n";
+				stream_buf_ << field.first << ": " << field.second << "\r\n";
 			}
 			if (!content_length_written && !chunked_transfer_encoding && !close_connection_after_response)
-				*this << "Content-Length: " << size << "\r\n\r\n";
+				stream_buf_ << "Content-Length: " << size << "\r\n\r\n";
 			else
-				*this << "\r\n";
+				stream_buf_ << "\r\n";
 		}
 
 		void Send();
-
-		void Write(const char_type *ptr, std::streamsize n);
 
 		void Write(http::StatusCode status_code = http::StatusCode::success_ok, const CaseInsensitiveMultimap &header = CaseInsensitiveMultimap());
 
@@ -132,6 +131,7 @@ namespace http {
 	public:
 		std::shared_ptr<Session> session_;
 		bool close_connection_after_response = false;
+		std::stringstream stream_buf_;
 	};
 
 	class Session
