@@ -4,11 +4,12 @@
 #include "server/event_loop.h"
 #include "websocket/websocket_server.h"
 #include "websocket/websocket_client.h"
+#include "http/http_server.h"
 
 void start_server(const std::string& address) 
 {
 	EventLoop loop;
-	WebsocketServer server(&loop, address, 1935);
+	http::HttpServer server(&loop, address, 1900);
 	server.start();
 	loop.loop();
 }
@@ -25,20 +26,7 @@ int main(int argc,char* argv[])
 {
     printf("hello from my_server!\n");
 
-	std::string type = "2";
-	std::string address = "";
-	if (argc >= 3)
-	{
-		type = argv[1];
-		address = argv[2];
-	}
-	if (type == "1")
-	{
-		start_server(address);
-	}
-	else 
-	{
-		start_client(address);
-	}
-    return 0;
+	start_server("127.0.0.1");
+    
+	return 0;
 }

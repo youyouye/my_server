@@ -37,7 +37,8 @@ message(STATUS "CXX_FLAGS = " ${CMAKE_CXX_FLAGS} " " ${CMAKE_CXX_FLAGS_${BUILD_T
 
 add_subdirectory(server)
 add_subdirectory(websocket)
+add_subdirectory(http)
 add_subdirectory(log)
 
 add_executable(server_test main.cpp)
-target_link_libraries(server_test websocket)
+target_link_libraries(server_test websocket http)
