@@ -188,12 +188,14 @@ namespace http {
 			else if (case_insensitive_equal(it->second, "keep-alive"))
 			{
 				auto new_session = std::make_shared<Session>(response->session_->conn_);
+				connections_info_[response->session_->conn_->name()] = new_session;
 				return CodecResult(CodecState::StartConnect, true);
 			}
 		}
 		if (response->session_->request_->http_version_ >= "1.1")
 		{
 			auto new_session = std::make_shared<Session>(response->session_->conn_);
+			connections_info_[response->session_->conn_->name()] = new_session;
 			return CodecResult(CodecState::StartConnect, true);
 		}
 
